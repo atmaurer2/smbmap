@@ -71,6 +71,15 @@ def colored(msg, *args, **kwargs):
         return termcolored(msg, *args, **kwargs)
     return msg
 
+def initalize_logger(logLevel: str = 'ERROR') -> logging.Logger:
+    logger = logging.getLogger(__name__)
+    handler = logging.StreamHandler(sys.stdout)
+    formatter = logging.Formatter('%(filename)s:%(lineno)d %(levelname)s - %(message)s','%m-%d %H:%M:%S')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logLevel)
+    return logger
+
 
 class Loader(Thread):
     def __init__(self):
@@ -108,10 +117,10 @@ class SMBServer(Thread):
     def __init__(self):
         Thread.__init__(self)
         self.smb = None
-        print('[+] Initializing SMB server..')
+        logger.info('[+] Initializing SMB server..')
 
     def cleanup_server(self):
-        logging.info('Cleaning up..')
+        logger.debug('Cleaning up..')
         try:
             os.unlink(SMBSERVER_DIR + '/smb.log')
         except:
@@ -157,12 +166,12 @@ class SMBServer(Thread):
         self.smb.registerNamedPipe('srvsvc',('127.0.0.1',self.__srvsServer.getListenPort()))
         self.smb.registerNamedPipe('wkssvc',('127.0.0.1',self.__wkstServer.getListenPort()))
         try:
-            print('[+] SMB server started...')
+            logger.info('[+] SMB server started...')
             self.__srvsServer.start()
             self.__wkstServer.start()
             self.smb.serve_forever()
         except Exception as e:
-            print('[!] Error starting SMB server: ', e)
+            logger.error('[!] Error starting SMB server: ', e)
             pass
 
     def stop(self):
@@ -201,13 +210,13 @@ class WMIEXEC:
 
             dialect = smbConnection.getDialect()
             if dialect == SMB_DIALECT:
-                logging.info("SMBv1 dialect used")
+                logging.debug("SMBv1 dialect used")
             elif dialect == SMB2_DIALECT_002:
-                logging.info("SMBv2.0 dialect used")
+                logging.debug("SMBv2.0 dialect used")
             elif dialect == SMB2_DIALECT_21:
-                logging.info("SMBv2.1 dialect used")
+                logging.debug("SMBv2.1 dialect used")
             else:
-                logging.info("SMBv3.0 dialect used")
+                logging.debug("SMBv3.0 dialect used")
         else:
             smbConnection = None
 
@@ -264,7 +273,7 @@ class RemoteShellWMI(cmd.Cmd):
         os.system(s)
 
     def do_help(self, line):
-        print("""
+        logger.info("""
  lcd {path}                 - changes the current local directory to {path}
  exit                       - terminates the server process (and this session)
  put {src_file, dst_path}   - uploads a local file to the dst_path (dst_path = default current directory)
@@ -274,7 +283,7 @@ class RemoteShellWMI(cmd.Cmd):
 
     def do_lcd(self, s):
         if s == '':
-            print(os.getcwd())
+            logger.info(os.getcwd())
         else:
             try:
                 os.chdir(s)
@@ -287,7 +296,7 @@ class RemoteShellWMI(cmd.Cmd):
             drive, tail = ntpath.splitdrive(newPath) 
             filename = ntpath.basename(tail)
             fh = open(filename,'wb')
-            logging.info("Downloading %s\\%s" % (drive, tail))
+            logging.debug("Downloading %s\\%s" % (drive, tail))
             self.__transferClient.getFile(drive[:-1]+'$', tail, fh.write)
             fh.close()
         except Exception as e:
@@ -310,7 +319,7 @@ class RemoteShellWMI(cmd.Cmd):
             dst_path = string.replace(dst_path, '/','\\')
             pathname = ntpath.join(ntpath.join(self.__pwd,dst_path), src_file)
             drive, tail = ntpath.splitdrive(pathname)
-            logging.info("Uploading %s to %s" % (src_file, pathname))
+            logging.debug("Uploading %s to %s" % (src_file, pathname))
             self.__transferClient.putFile(drive[:-1]+'$', tail, fh.read)
             fh.close()
         except Exception as e:
@@ -326,7 +335,7 @@ class RemoteShellWMI(cmd.Cmd):
     def do_cd(self, s):
         self.execute_remote('cd ' + s)
         if len(self.__outputBuffer.strip('\r\n')) > 0:
-            print(self.__outputBuffer)
+            logger.info(self.__outputBuffer)
             self.__outputBuffer = ''
         else:
             self.__pwd = ntpath.normpath(ntpath.join(self.__pwd, s))
@@ -341,7 +350,7 @@ class RemoteShellWMI(cmd.Cmd):
             # Execute the command and see if the drive is valid
             self.execute_remote(line)
             if len(self.__outputBuffer.strip('\r\n')) > 0:
-                print(self.__outputBuffer)
+                logger.info(self.__outputBuffer)
                 self.__outputBuffer = ''
             else:
                 # Drive valid, now we should get the current path
@@ -388,7 +397,7 @@ class RemoteShellWMI(cmd.Cmd):
     def send_data(self, data):
         self.execute_remote(data)
         if self.__disp_output:
-            print(self.__outputBuffer)
+            logger.info(self.__outputBuffer)
         __lastCmdOutput = self.__outputBuffer
         self.__outputBuffer = ''
         return __lastCmdOutput
@@ -441,7 +450,7 @@ class CMDEXEC:
             if self.__mode == 'SERVER':
                 serverThread.stop()
         except  (Exception, KeyboardInterrupt) as e:
-            print('[!] Something went wrong:', str(e))
+            logger.error('[!] Something went wrong:', str(e))
 
 class RemoteShell(cmd.Cmd):
     def __init__(self, share, rpc, mode, serviceName):
@@ -461,7 +470,7 @@ class RemoteShell(cmd.Cmd):
             self.__scmr.connect()
         except Exception as e:
             #logging.critical(str(e))
-            print(e)
+            logger.critical(e)
             #sys.exit(1)
 
         s = rpc.get_smb_connection()
@@ -555,7 +564,7 @@ class RemoteShell(cmd.Cmd):
 
     def send_data(self, data):
         self.execute_remote(data)
-        print(self.__outputBuffer)
+        logger.info(self.__outputBuffer)
         self.__outputBuffer = ''
 
 
@@ -570,7 +579,6 @@ class SMBMap():
         self.dir_only = False
         self.list_files = False
         self.loading = False
-        self.verbose = True
         self.smbconn = {}
         self.isLoggedIn = False
         self.pattern = None
@@ -603,8 +611,7 @@ class SMBMap():
             return smbconn
 
         except Exception as e:
-            if self.verbose:
-                print('[!] Authentication error on %s' % (host))
+            logger.error('[!] Authentication error on %s' % (host))
             return False
 
     def logout(self, host):
@@ -620,8 +627,7 @@ class SMBMap():
                 success = self.login_rpc(host, self.hosts[host]['user'], self.hosts[host]['passwd'], self.hosts[host]['domain'], self.hosts[host]['lmhash'], self.hosts[host]['nthash'])
 
             if not success:
-                if self.verbose:
-                    print('[!] Authentication error on %s' % (host))
+                logger.error('[!] Authentication error on %s' % (host))
                 self.smbconn.pop(host,None)
                 self.hosts.pop(host, None)
                 continue
@@ -642,7 +648,7 @@ class SMBMap():
             return True
 
         except Exception as e:
-            print('[!] RPC Authentication error occurred')
+            logger.error('[!] RPC Authentication error occurred')
             return False
 
     def start_smb_server(self):
@@ -651,7 +657,7 @@ class SMBMap():
             serverThread.daemon = True
             serverThread.start()
         except:
-            print('[!] Run as r00t, or maybe something is using port 445...')
+            logger.error('[!] Run as r00t, or maybe something is using port 445...')
             sys.exit()
 
     def start_file_search(self, host, pattern, share, search_path):
@@ -669,7 +675,7 @@ class SMBMap():
 
             ps_command = 'powershell -ExecutionPolicy bypass -NoLogo -command "Start-Process """cmd.exe""" """/c \\\\{}\\{}\\{}.bat""" "'.format(myIPaddr, PSUTIL_SHARE, job_name)
             success = self.exec_command(host, share, ps_command, disp_output=False)
-            print('[+] Job {} started on {}, result will be stored at {}\{}.txt'.format(job_name, host, tmp_dir, job_name))
+            logger.info('[+] Job {} started on {}, result will be stored at {}\{}.txt'.format(job_name, host, tmp_dir, job_name))
             proc_id = self.get_job_procid(host, share, tmp_dir, job_name)
             if len(proc_id) > 0:
                 proc_id = [j.strip() for j in proc_id.split('\n') if len(j) > 0]
@@ -679,7 +685,7 @@ class SMBMap():
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             #print('[!] Something weird happened: {} on line {}'.format(e, exc_tb.tb_lineno))
             sys.stdout.flush()
-            print('[!] Job creation failed on host: %s. Did you run as r00t?' % (host))
+            logger.error('[!] Job creation failed on host: %s. Did you run as r00t?' % (host))
     
     def get_job_procid(self, host, share, path, job):
         try:
@@ -691,11 +697,11 @@ class SMBMap():
         except Exception as e:
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            print('[!] WTF: {} on line {}'.format(e, exc_tb.tb_lineno))
+            logger.error('[!] WTF: {} on line {}'.format(e, exc_tb.tb_lineno))
             sys.stdout.flush()
 
     def get_search_results(self, timeout):
-        print('[+] Checking on search results, be patient, drives tend to be big...')
+        logger.info('[+] Checking on search results, be patient, drives tend to be big...')
         counter = 0
         num_jobs = len(list(self.jobs.keys()))
         start_time = time.perf_counter() 
@@ -715,7 +721,7 @@ class SMBMap():
                             self.search_output_buffer += '\n'
                         else:
                             self.search_output_buffer += 'No matching patterns found\n\n'
-                        print('[+] Job %d of %d completed on %s...' % (counter, num_jobs, self.jobs[job]['host']))
+                        logger.info('[+] Job %d of %d completed on %s...' % (counter, num_jobs, self.jobs[job]['host']))
                         self.delete_file(self.jobs[job]['host'], dl_target)
                         os.remove('./{}/{}.bat'.format(PSUTIL_DIR, job))
                         self.jobs.pop(job, None)
@@ -723,16 +729,16 @@ class SMBMap():
                             break
                     else:
                         if time.perf_counter()-self.jobs[job]['start_time'] > int(timeout):
-                            print('[!] Job {} is taking a long time....it\'s getting punted'.format(job))
+                            logger.error("[!] Job {} is taking a long time....it's getting punted".format(job))
                             for pid in self.jobs[job]['proc_id']:
                                 kill_job = 'taskkill /PID {} /F'.format(pid)
                                 success = self.exec_command(self.jobs[job]['host'], self.jobs[job]['share'], kill_job, disp_output=False)
                                 os.remove('./{}/{}.bat'.format(PSUTIL_DIR, job))
                         time.sleep(10)
             except Exception as e:
-                print(e)
-        print('[+] All jobs complete')
-        print(self.search_output_buffer)
+                logger.critical(e)
+        logger.info('[+] All jobs complete')
+        logger.info(self.search_output_buffer)
 
     def get_ip_address(self):
         myIPaddr = ''
@@ -765,16 +771,16 @@ class SMBMap():
                             break
                     disks.append(net_disks)
                     net_disks = ''
-            print('[+] Host %s Local %s' % (host, local_disks.strip()))
-            print('[+] Host %s Net Drive(s):' % (host))
+            logger.info('[+] Host %s Local %s' % (host, local_disks.strip()))
+            logger.info('[+] Host %s Net Drive(s):' % (host))
             if len(disks) > 0:
                 for disk in disks:
-                     print('\t%s' % (disk))
+                     logger.info('\t%s' % (disk))
             else:
-                print('\tNo mapped network drives')
+                logger.info('\tNo mapped network drives')
             pass
         except Exception as e:
-            print('[!] Error on {}: {}'.format(host, e))
+            logger.error('[!] Error on {}: {}'.format(host, e))
 
     def output_shares(self, host, lsshare, lspath, write_check=True, depth=5):
         shareList = [(lsshare,'')] if lsshare else self.get_shares(host)
@@ -798,7 +804,7 @@ class SMBMap():
                         try:
                             self.remove_dir(host, share_name, root)
                         except Exception as e:
-                            print('\t[!] Unable to remove test directory at \\\\%s\\%s\\%s, please remove manually' % (host, share_name, root))
+                            logger.error('\t[!] Unable to remove test directory at \\\\%s\\%s\\%s, please remove manually' % (host, share_name, root))
                     except Exception as e:
                         exc_type, exc_obj, exc_tb = sys.exc_info()
                         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
@@ -814,7 +820,7 @@ class SMBMap():
                             try:
                                 self.remove_file(host, share_name, root)
                             except Exception as e:
-                                print('\t[!] Unable to remove test file at \\\\%s\\%s\\%s, please remove manually' % (host, share_name, root))
+                                logger.error('\t[!] Unable to remove test file at \\\\%s\\%s\\%s, please remove manually' % (host, share_name, root))
                         except Exception as e:
                             exc_type, exc_obj, exc_tb = sys.exc_info()
                             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
@@ -841,12 +847,12 @@ class SMBMap():
                             path = '/'
                         if self.list_files:
                             if self.pattern:
-                                print('[+] Starting search for files matching \'%s\' on share %s.' % (self.pattern, share[0]))
+                                logger.info('[+] Starting search for files matching \'%s\' on share %s.' % (self.pattern, share[0]))
                             contents = self.list_path(host, share_name, path, depth)
                 except Exception as e:
                     exc_type, exc_obj, exc_tb = sys.exc_info()
                     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                    print('[!] Something weird happened: {} on line {}'.format(e, exc_tb.tb_lineno))
+                    logger.error('[!] Something weird happened: {} on line {}'.format(e, exc_tb.tb_lineno))
                     sys.stdout.flush()
                     sys.exit()
                 share_tree[share_name]['contents'] = contents
@@ -879,7 +885,7 @@ class SMBMap():
                         if fileMatch:
                             dlThis = '%s\%s%s' % (share, pwd.strip('*'), filename)
                             dlThis = dlThis.replace('/','\\')
-                            print('[+] Match found! Downloading: %s' % (dlThis))
+                            logger.info('[+] Match found! Downloading: %s' % (dlThis))
                             self.download_file(host, dlThis)
                 if (self.dir_only == True and isDir == 'd') or ( (isDir == 'f' or isDir == 'd') and self.dir_only == False):
                     path_list[path].append({'isDir': isDir, 'readonly': readonly, 'filesize': filesize, 'date': date, 'filename': filename})
@@ -898,7 +904,7 @@ class SMBMap():
         except Exception as e:
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            print('[!] Something weird happened: {} on line {}'.format(e, exc_tb.tb_lineno))
+            logger.error('[!] Something weird happened: {} on line {}'.format(e, exc_tb.tb_lineno))
             sys.stdout.flush()
             return {}
 
@@ -922,27 +928,27 @@ class SMBMap():
                     row['Privs'] = share_tree[item]['privs'].replace(',','').replace(' ', '_')
                     row['Comment'] = share_tree[item]['comment'].replace('\r','').replace('\n', '')
                     self.writer.writerow(row) 
-                if self.verbose == False and 'NO ACCESS' not in share_tree[item]['privs'] and self.grepable == False and not self.pattern and self.csv == False:
+                if 'NO ACCESS' not in share_tree[item]['privs'] and self.grepable == False and not self.pattern and self.csv == False:
                     if heads_up == False:
-                        print(header)
+                        logger.info(header)
                         heads_up = True
-                    print('\t{}\t{}\t{}'.format(item.ljust(50), share_name_privs, share_tree[item]['comment'] ) )
-                elif self.verbose and self.grepable == False and self.csv == False and  not self.pattern:
+                    logger.info('\t{}\t{}\t{}'.format(item.ljust(50), share_name_privs, share_tree[item]['comment'] ) )
+                elif self.grepable == False and self.csv == False and  not self.pattern:
                     if heads_up == False:
-                        print(header)
+                        logger.info(header)
                         heads_up = True
-                    print('\t{}\t{}\t{}'.format(item.ljust(50), share_name_privs, share_tree[item]['comment'] ) )
+                    logger.info('\t{}\t{}\t{}'.format(item.ljust(50), share_name_privs, share_tree[item]['comment'] ) )
                 for path in share_tree[item]['contents'].keys():
-                    if self.grepable == False and self.csv == False and self.verbose:
-                        print('\t.\{}\{}'.format(item, self.pathify(path)))
+                    if self.grepable == False and self.csv == False:
+                        logger.info('\t.\{}\{}'.format(item, self.pathify(path)))
                     for file_info in share_tree[item]['contents'][path]:
                         isDir = file_info['isDir']
                         readonly = file_info['readonly']
                         filesize = file_info['filesize']
                         date = file_info['date']
                         filename = file_info['filename']
-                        if (self.verbose and self.grepable == False and self.csv == False) and ((self.dir_only == True and isDir == 'd') or ( (isDir == 'f' or isDir == 'd') and self.dir_only == False)):
-                            print('\t%s%s--%s--%s-- %s %s\t%s' % (isDir, readonly, readonly, readonly, str(filesize).rjust(16), date, filename))
+                        if (self.grepable == False and self.csv == False) and ((self.dir_only == True and isDir == 'd') or ( (isDir == 'f' or isDir == 'd') and self.dir_only == False)):
+                            logger.info('\t%s%s--%s--%s-- %s %s\t%s' % (isDir, readonly, readonly, readonly, str(filesize).rjust(16), date, filename))
                         elif self.grepable:
                             if filename != '.' and filename != '..':
                                 if (self.dir_only == True and isDir == 'd') or ( (isDir == 'f' or isDir == 'd') and self.dir_only == False):
@@ -960,7 +966,7 @@ class SMBMap():
                                     row['Date'] = date
                                     self.writer.writerow(row) 
         except Exception as e:
-            print('[!] Bummer: ', e)
+            logger.error('[!] Bummer: ', e)
 
     def get_shares(self, host):
         try:
@@ -972,7 +978,7 @@ class SMBMap():
         except Exception as e:
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            print('[!] Something weird happened: {} on line {}'.format(e, exc_tb.tb_lineno))
+            logger.error('[!] Something weird happened: {} on line {}'.format(e, exc_tb.tb_lineno))
             sys.stdout.flush()
             self.kill_loader()
             #sys.exit()
@@ -1020,30 +1026,36 @@ class SMBMap():
         try:
             out = open(ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_')))),'wb')
             dlFile = self.smbconn[host].listPath(share, path)
-            if self.verbose:
-                msg = '[+] Starting download: %s (%s bytes)' % ('%s%s' % (share, path), dlFile[0].get_filesize())
-                if self.pattern:
-                    msg = '\t' + msg
-                print(msg)
+
+            msg = '[+] Starting download: %s (%s bytes)' % ('%s%s' % (share, path), dlFile[0].get_filesize())
+            if self.pattern:
+                msg = '\t' + msg
+                logger.info(msg)
+
             self.smbconn[host].getFile(share, path, out.write)
-            if self.verbose:
-                msg = '[+] File output to: %s/%s' % (os.getcwd(), ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_')))))
-                if self.pattern:
-                    msg = '\t'+msg
-                print(msg)
+            
+            msg = '[+] File output to: %s/%s' % (os.getcwd(), ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_')))))
+            if self.pattern:
+                msg = '\t'+msg
+                logger.info(msg)
         except SessionError as e:
-            if 'STATUS_ACCESS_DENIED' in str(e):
-                print('[!] Error retrieving file, access denied')
-            elif 'STATUS_INVALID_PARAMETER' in str(e):
-                print('[!] Error retrieving file, invalid path')
-            elif 'STATUS_SHARING_VIOLATION' in str(e):
-                print('[!] Error retrieving file %s, sharing violation' % (filename))
-                out.close()
-                os.remove(ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_')))))
+            error_message = str(e)
+            if 'STATUS_ACCESS_DENIED' in error_message:
+                logger.error('[!] Error retrieving file, access denied')
+            elif 'STATUS_INVALID_PARAMETER' in error_message:
+                logger.error('[!] Error retrieving file, invalid path')
+            elif 'STATUS_SHARING_VIOLATION' in error_message:
+                logger.error('[!] Error retrieving file %s, sharing violation' % (filename))
+                os.remove(output_path)
+            elif 'STATUS_NO_SUCH_FILE' in error_message:
+                logger.error('[!] Error retrieving file %s, file not found on network share' % filename)
+            else:
+                logger.error('[!] Error retrieving file %s, error unknown' % filename)
+                logger.error(str(e))
         except Exception as e:
-            print('[!] Error retrieving file, unknown error')
+            logger.error('[!] Error retrieving file, unknown error')
             os.remove(filename)
-        out.close()
+            out.close()
         return '%s/%s' % (os.getcwd(), ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_')))))
 
     def exec_command(self, host, share, command, disp_output=True, host_name=None, mode='wmi'):
@@ -1063,7 +1075,7 @@ class SMBMap():
             return result
         except:
             exc_type, exc_obj, exc_tb = sys.exc_info()
-            print('[!] Something weird happened: {} on line {}'.format(e, exc_tb.tb_lineno))
+            logger.error('[!] Something weird happened: {} on line {}'.format(e, exc_tb.tb_lineno))
             sys.stdout.flush()
             return none
 
@@ -1076,24 +1088,23 @@ class SMBMap():
         path = path.replace(filename, '')
         try:
             self.smbconn[host].deleteFile(share, path + filename)
-            if self.verbose:
-                print('[+] File successfully deleted: %s%s%s' % (share, path, filename))
+            logger.debug('[+] File successfully deleted: %s%s%s' % (share, path, filename))
         except SessionError as e:
             if 'STATUS_ACCESS_DENIED' in str(e):
-                print('[!] Error deleting file, access denied')
+                logger.error('[!] Error deleting file, access denied')
             elif 'STATUS_INVALID_PARAMETER' in str(e):
-                print('[!] Error deleting file, invalid path')
+                logger.error('[!] Error deleting file, invalid path')
             elif 'STATUS_SHARING_VIOLATION' in str(e):
-                print('[!] Error retrieving file, sharing violation')
+                logger.error('[!] Error retrieving file, sharing violation')
             elif 'STATUS_FILE_IS_A_DIRECTORY' in str(e):
                 self.smbconn[host].deleteDirectory(share, path)
                 #self.remove_dir(host, share, path) 
             else:
-                print('[!] Error deleting file %s%s%s, unknown error' % (share, path, filename))
-                print('[!]', e)
+                logger.error('[!] Error deleting file %s%s%s, unknown error' % (share, path, filename))
+                logger.error('[!]', e)
         except Exception as e:
-            print('[!] Error deleting file %s%s%s, unknown error' % (share, path, filename))
-            print('[!]', e)
+            logger.error('[!] Error deleting file %s%s%s, unknown error' % (share, path, filename))
+            logger.error('[!]', e)
 
     def upload_file(self, host, src, dst):
         dst = dst.replace('/','\\')
@@ -1102,17 +1113,17 @@ class SMBMap():
         share = dst[0]
         dst = '\\'.join(dst[1:])
         if os.path.exists(src):
-            print('[+] Starting upload: %s (%s bytes)' % (src, os.path.getsize(src)))
+            logger.info('[+] Starting upload: %s (%s bytes)' % (src, os.path.getsize(src)))
             upFile = open(src, 'rb')
             try:
                 self.smbconn[host].putFile(share, dst, upFile.read)
-                print('[+] Upload complete')
+                logger.info('[+] Upload complete')
             except Exception as e:
-                print('[!]', e)
-                print('[!] Error uploading file, you need to include destination file name in the path')
+                logger.error('[!]', e)
+                logger.error('[!] Error uploading file, you need to include destination file name in the path')
             upFile.close()
         else:
-            print('[!] Invalid source. File does not exist')
+            logger.critical('[!] Invalid source. File does not exist')
             sys.exit()
 
     def is_ntlm(self, password):
@@ -1130,10 +1141,10 @@ class SMBMap():
         domain = self.smbconn[host].getServerDomain()
         if not domain:
             domain = self.smbconn[host].getServerName()
-        print("[+] {}:{} is running {} (name:{}) (domain:{})".format(host, 445, self.smbconn[host].getServerOS(), self.smbconn[host].getServerName(), domain))
+        logger.info("[+] {}:{} is running {} (name:{}) (domain:{})".format(host, 445, self.smbconn[host].getServerOS(), self.smbconn[host].getServerName(), domain))
 
 def signal_handler(signal, frame):
-    print('You pressed Ctrl+C!')
+    logger.error('You pressed Ctrl+C!')
     os._exit(0)
 
 def find_open_ports(address):
@@ -1163,8 +1174,7 @@ def login(host):
         return smbconn
 
     except Exception as e:
-        if VERBOSE:
-            print('[!] Authentication error on {}'.format(host['ip']))
+        logger.error('[!] Authentication error on {}'.format(host['ip']))
         return False
 
 if __name__ == "__main__":
@@ -1193,6 +1203,7 @@ if __name__ == "__main__":
     sgroup.add_argument("--no-banner", dest='nobanner', default=False, action='store_true', help='Removes the banner from the top of the output') 
     sgroup.add_argument("--no-color", dest='nocolor', default=False, action='store_true', help='Removes the color from output') 
     sgroup.add_argument("--no-update", dest='noupdate', default=False, action='store_true', help='Removes the "Working on it" message') 
+    sgroup.add_argument("--log-level", dest='logLevel', default='INFO', help='Sets log level') 
 
     sgroup2 = parser.add_argument_group("Command Execution", "Options for executing commands on the specified host")
 
@@ -1231,6 +1242,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     args = parser.parse_args()
+    
+    logger = initalize_logger(logLevel=args.logLevel)
 
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -1312,14 +1325,14 @@ if __name__ == "__main__":
             try:
                 args.hostfile = [ str(ip) for ip in ipaddress.ip_network(args.host, False).hosts() ]
             except Exception as e:
-                print('[!] Invalid host...')
+                logger.error('[!] Invalid host...')
                 sys.exit(1)
 
     if args.hostfile: 
-        print('[*]', 'Checking for open ports...')
+        logger.info('[*]', 'Checking for open ports...')
         porty_time = Pool(40)
         args.hostfile = porty_time.map(find_open_ports, args.hostfile)
-        print('[*]','Detected {} hosts serving SMB'.format(sum(im_open is not False for im_open in args.hostfile)))
+        logger.info('[*]','Detected {} hosts serving SMB'.format(sum(im_open is not False for im_open in args.hostfile)))
 
     if mysmb.is_ntlm(args.passwd):
         lmhash, nthash = args.passwd.split(':')
@@ -1365,7 +1378,7 @@ if __name__ == "__main__":
             except:
                 pass
             mysmb.kill_loader()
-        print('[+] File search started on {} hosts in directory {}...this could take a while'.format(counter, search_path))
+        logger.info('[+] File search started on {} hosts in directory {}...this could take a while'.format(counter, search_path))
         mysmb.get_search_results(args.search_timeout)
         if mysmb.loading:
             mysmb.kill_loader()
@@ -1426,8 +1439,8 @@ if __name__ == "__main__":
                         priv_status = 'Status: ' + colored ('Authenticated', 'green')
                     
                     if (not mysmb.grepable and not args.admin and not mysmb.csv) or (not mysmb.grepable and not mysmb.csv and args.admin and is_admin):
-                        print(' '*100)
-                        print('[+] IP: {}:{}\tName: {}\t{}'.format(host, mysmb.hosts[host]['port'], mysmb.hosts[host]['name'].ljust(20), priv_status ))
+                        logger.debug(' '*100)
+                        logger.info('[+] IP: {}:{}\tName: {}\t{}'.format(host, mysmb.hosts[host]['port'], mysmb.hosts[host]['name'].ljust(20), priv_status ))
                     tmp = mysmb.get_shares(host)
                     if not args.admin and tmp is not None:
                         mysmb.output_shares(host, lsshare, lspath, args.write_check, args.depth)
@@ -1443,11 +1456,11 @@ if __name__ == "__main__":
             except Exception as e:
                 exc_type, exc_obj, exc_tb = sys.exc_info()
                 fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                print('[!] Error: ', (exc_type, fname, exc_tb.tb_lineno))
+                logger.error('[!] Error: ', (exc_type, fname, exc_tb.tb_lineno))
                 sys.stdout.flush()
         
         if args.grepable or args.csv:
-            print('[*]','Results output to: {}'.format(mysmb.outfile.name))
+            logger.info('[*]','Results output to: {}'.format(mysmb.outfile.name))
             mysmb.outfile.close()
             
 
