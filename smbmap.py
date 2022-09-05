@@ -1034,8 +1034,8 @@ class SMBMap():
 
             with open(output_path,'wb') as out:
                 self.smbconn[host].getFile(share, path, out.write)
-            
-            msg = '[+] File output to: %s/%s' % (os.getcwd(), ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_')))))
+
+            msg = '[+] File output to: %s/%s' % (os.getcwd(), output_path)
             if self.pattern:
                 msg = '\t'+msg
             logger.debug(msg)
@@ -1053,7 +1053,8 @@ class SMBMap():
                 logger.error('[!] Error retrieving file %s, error unknown' % filename)
                 logger.error(str(e))
         except Exception as e:
-            logger.error('[!] Error retrieving file, unknown error')
+            logger.error('[!] Error retrieving file %s, error unknown' % filename)
+            logger.error(str(e))
         return '%s/%s' % (os.getcwd(), output_path)
 
     def exec_command(self, host, share, command, disp_output=True, host_name=None, mode='wmi'):
@@ -1354,10 +1355,16 @@ if __name__ == "__main__":
 
     if args.admin:
         mysmb.verbose = False
-    
+        
     connections = []
-    login_worker = Pool(40)
-    connections = login_worker.map(login, hosts)
+
+    if len(hosts) > 0:
+        login_worker = Pool(40)
+        connections = login_worker.map(login, hosts)
+    else:
+        logger.critical("[!] No hosts have ports 139 or 445 open")
+        os._exit(1)
+
     mysmb.hosts = { value['ip']:value for value in hosts }
     mysmb.smbconn = { conn.getRemoteHost():conn for conn in connections if conn is not False}
     counter = 0
