@@ -1023,21 +1023,22 @@ class SMBMap():
         filename = path.split('\\')[-1]
         share = path.split('\\')[0]
         path = path.replace(share, '')
+        output_path = ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_'))))
         try:
-            out = open(ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_')))),'wb')
+            out = open(output_path,'wb')
             dlFile = self.smbconn[host].listPath(share, path)
 
             msg = '[+] Starting download: %s (%s bytes)' % ('%s%s' % (share, path), dlFile[0].get_filesize())
             if self.pattern:
                 msg = '\t' + msg
-                logger.info(msg)
+                logger.debug(msg)
 
             self.smbconn[host].getFile(share, path, out.write)
             
             msg = '[+] File output to: %s/%s' % (os.getcwd(), ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_')))))
             if self.pattern:
                 msg = '\t'+msg
-                logger.info(msg)
+                logger.debug(msg)
         except SessionError as e:
             error_message = str(e)
             if 'STATUS_ACCESS_DENIED' in error_message:
@@ -1054,9 +1055,10 @@ class SMBMap():
                 logger.error(str(e))
         except Exception as e:
             logger.error('[!] Error retrieving file, unknown error')
-            os.remove(filename)
             out.close()
-        return '%s/%s' % (os.getcwd(), ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_')))))
+            os.remove(output_path)
+        out.close()
+        return '%s/%s' % (os.getcwd(), output_path)
 
     def exec_command(self, host, share, command, disp_output=True, host_name=None, mode='wmi'):
         try:
