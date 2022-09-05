@@ -570,7 +570,6 @@ class SMBMap():
         self.dir_only = False
         self.list_files = False
         self.loading = False
-        self.verbose = True
         self.smbconn = {}
         self.isLoggedIn = False
         self.pattern = None
@@ -603,8 +602,7 @@ class SMBMap():
             return smbconn
 
         except Exception as e:
-            if self.verbose:
-                logger.error('[!] Authentication error on %s' % (host))
+            logger.error('[!] Authentication error on %s' % (host))
             return False
 
     def logout(self, host):
@@ -620,8 +618,7 @@ class SMBMap():
                 success = self.login_rpc(host, self.hosts[host]['user'], self.hosts[host]['passwd'], self.hosts[host]['domain'], self.hosts[host]['lmhash'], self.hosts[host]['nthash'])
 
             if not success:
-                if self.verbose:
-                    logger.info('[!] Authentication error on %s' % (host))
+                logger.error('[!] Authentication error on %s' % (host))
                 self.smbconn.pop(host,None)
                 self.hosts.pop(host, None)
                 continue
@@ -922,18 +919,18 @@ class SMBMap():
                     row['Privs'] = share_tree[item]['privs'].replace(',','').replace(' ', '_')
                     row['Comment'] = share_tree[item]['comment'].replace('\r','').replace('\n', '')
                     self.writer.writerow(row) 
-                if self.verbose == False and 'NO ACCESS' not in share_tree[item]['privs'] and self.grepable == False and not self.pattern and self.csv == False:
+                if 'NO ACCESS' not in share_tree[item]['privs'] and self.grepable == False and not self.pattern and self.csv == False:
                     if heads_up == False:
                         logger.info(header)
                         heads_up = True
                     logger.info('\t{}\t{}\t{}'.format(item.ljust(50), share_name_privs, share_tree[item]['comment'] ) )
-                elif self.verbose and self.grepable == False and self.csv == False and  not self.pattern:
+                elif self.grepable == False and self.csv == False and  not self.pattern:
                     if heads_up == False:
                         logger.info(header)
                         heads_up = True
                     logger.info('\t{}\t{}\t{}'.format(item.ljust(50), share_name_privs, share_tree[item]['comment'] ) )
                 for path in share_tree[item]['contents'].keys():
-                    if self.grepable == False and self.csv == False and self.verbose:
+                    if self.grepable == False and self.csv == False:
                         logger.info('\t.\{}\{}'.format(item, self.pathify(path)))
                     for file_info in share_tree[item]['contents'][path]:
                         isDir = file_info['isDir']
@@ -941,7 +938,7 @@ class SMBMap():
                         filesize = file_info['filesize']
                         date = file_info['date']
                         filename = file_info['filename']
-                        if (self.verbose and self.grepable == False and self.csv == False) and ((self.dir_only == True and isDir == 'd') or ( (isDir == 'f' or isDir == 'd') and self.dir_only == False)):
+                        if (self.grepable == False and self.csv == False) and ((self.dir_only == True and isDir == 'd') or ( (isDir == 'f' or isDir == 'd') and self.dir_only == False)):
                             logger.info('\t%s%s--%s--%s-- %s %s\t%s' % (isDir, readonly, readonly, readonly, str(filesize).rjust(16), date, filename))
                         elif self.grepable:
                             if filename != '.' and filename != '..':
@@ -1020,17 +1017,18 @@ class SMBMap():
         try:
             out = open(ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_')))),'wb')
             dlFile = self.smbconn[host].listPath(share, path)
-            if self.verbose:
+
             msg = '[+] Starting download: %s (%s bytes)' % ('%s%s' % (share, path), dlFile[0].get_filesize())
             if self.pattern:
                 msg = '\t' + msg
-                print(msg)
+                logger.info(msg)
+
             self.smbconn[host].getFile(share, path, out.write)
-            if self.verbose:
-                msg = '[+] File output to: %s/%s' % (os.getcwd(), ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_')))))
+            
+            msg = '[+] File output to: %s/%s' % (os.getcwd(), ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_')))))
             if self.pattern:
                 msg = '\t'+msg
-                print(msg)
+                logger.info(msg)
         except SessionError as e:
             error_message = str(e)
             if 'STATUS_ACCESS_DENIED' in error_message:
@@ -1047,7 +1045,6 @@ class SMBMap():
                 logger.error(str(e))
         except Exception as e:
             logger.error('[!] Error retrieving file, unknown error')
-            print('[!] Error retrieving file, unknown error')
             os.remove(filename)
             out.close()
         return '%s/%s' % (os.getcwd(), ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_')))))
