@@ -1022,18 +1022,18 @@ class SMBMap():
         path = ntpath.normpath(path)
         filename = path.split('\\')[-1]
         share = path.split('\\')[0]
-        path = path.replace(share, '')
+        path = path.replace(share, '', 1)
         output_path = ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_'))))
         try:
-            out = open(output_path,'wb')
             dlFile = self.smbconn[host].listPath(share, path)
 
             msg = '[+] Starting download: %s (%s bytes)' % ('%s%s' % (share, path), dlFile[0].get_filesize())
             if self.pattern:
                 msg = '\t' + msg
-                logger.debug(msg)
+            logger.debug(msg)
 
-            self.smbconn[host].getFile(share, path, out.write)
+            with open(output_path,'wb') as out:
+                self.smbconn[host].getFile(share, path, out.write)
             
             msg = '[+] File output to: %s/%s' % (os.getcwd(), ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_')))))
             if self.pattern:
@@ -1047,7 +1047,6 @@ class SMBMap():
                 logger.error('[!] Error retrieving file, invalid path')
             elif 'STATUS_SHARING_VIOLATION' in error_message:
                 logger.error('[!] Error retrieving file %s, sharing violation' % (filename))
-                os.remove(output_path)
             elif 'STATUS_NO_SUCH_FILE' in error_message:
                 logger.error('[!] Error retrieving file %s, file not found on network share' % filename)
             else:
@@ -1055,9 +1054,6 @@ class SMBMap():
                 logger.error(str(e))
         except Exception as e:
             logger.error('[!] Error retrieving file, unknown error')
-            out.close()
-            os.remove(output_path)
-        out.close()
         return '%s/%s' % (os.getcwd(), output_path)
 
     def exec_command(self, host, share, command, disp_output=True, host_name=None, mode='wmi'):
