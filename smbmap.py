@@ -71,6 +71,15 @@ def colored(msg, *args, **kwargs):
         return termcolored(msg, *args, **kwargs)
     return msg
 
+def initalize_logger(logLevel: str = 'ERROR') -> logging.Logger:
+    logger = logging.getLogger(__name__)
+    handler = logging.StreamHandler(sys.stdout)
+    formatter = logging.Formatter('%(filename)s:%(lineno)d %(levelname)s - %(message)s','%m-%d %H:%M:%S')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logLevel)
+    return logger
+
 
 class Loader(Thread):
     def __init__(self):
@@ -1167,13 +1176,6 @@ def login(host):
     except Exception as e:
         logger.error('[!] Authentication error on {}'.format(host['ip']))
         return False
-
-def initalize_logger(logLevel: str = 'ERROR') -> logging.Logger:
-    logger = logging.getLogger(__name__)
-    handler = logging.StreamHandler(sys.stdout)
-    logger.addHandler(handler)
-    logger.setLevel(logLevel)
-    return logger
 
 if __name__ == "__main__":
 
