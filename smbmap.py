@@ -1038,7 +1038,7 @@ class SMBMap():
             msg = '[+] File output to: %s/%s' % (os.getcwd(), ntpath.basename('%s/%s' % (os.getcwd(), '%s-%s%s' % (host, share.replace('$',''), path.replace('\\','_')))))
             if self.pattern:
                 msg = '\t'+msg
-                logger.debug(msg)
+            logger.debug(msg)
         except SessionError as e:
             error_message = str(e)
             if 'STATUS_ACCESS_DENIED' in error_message:
